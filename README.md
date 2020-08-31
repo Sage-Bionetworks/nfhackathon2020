@@ -2,7 +2,7 @@
 
 
 <p align="center">
-<img src="" alt="banner" width="800"/>
+<img src="https://github.com/Sage-Bionetworks/nfhackathon2020/blob/master/1200x628.png" alt="banner" width="800"/>
 </p>
 
 
