@@ -93,7 +93,7 @@ I haven't tried to dual-boot my Windows Home Edition PC to Linux.  I can still r
 
 * Run the newly installed Docker Quickstart 
 
-* In Docker Quickstart, download one of the docker images listed on the GitHub, for example ```docker pull nfosi/nf-hackathon-2019-py```
+* In Docker Quickstart, download one of the docker images listed on the GitHub, for example ```docker pull nfosi/nf-hackathon-2020-py```
 
 * In Docker Quickstart, run ```docker-machine ip``` to get the IP address.  Suppose it is 123.456.78.910.
 
