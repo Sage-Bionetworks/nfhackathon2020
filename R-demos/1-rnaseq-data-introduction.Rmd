@@ -1,0 +1,409 @@
+---
+title: "RNA-Seq Data Introduction"
+author: Jineta Banerjee
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output: 
+  html_document:
+    toc: true
+    number_sections: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Getting Started
+
+This document aims to guide the challenge particpants with limited exposure to Synapse as a platform and clinical/biological data, through exploration and analysis of the available RNASeq datasets. The available dataset has been carefully curated to include gene expression (RNASeq) data from eight different tumor types from four different study initiatives into a single platform (a harmonized dataset). 
+
+The scope of this document is to inform participants:
+
+* how to navigate the Synapse environment to access and work with the data files
+* display the key features of the gene-expression (RNASeq) dataset 
+* introduce few general analyses steps of the data and their interpretation
+
+At the end of this document, the participants would be able to download the data and understand various intricacies that exists in this given dataset. We encourage participants to visualize the dataset by faceting on different variables to get an accurate understanding of the dataset. 
+
+## Loading Analytical Packages
+
+Lets first load the R packages we need to query, download, and analyze the data that is stored on Synapse.
+
+```{r lib_synapser, echo=FALSE, eval=TRUE, results='hide', message=FALSE, warning=FALSE}
+
+library(synapser)
+library(BiocManager)
+library(gProfileR)
+library(GOsummaries)
+library(tidyverse)
+library(ggfortify)
+library(GSVA)
+library(GSVAdata)
+library(biomartr)
+library(pheatmap)
+library(biomaRt)
+library(sagethemes)
+
+```
+
+## Logging in to Synapse
+
+Please download the Synapse R client: [R](https://r-docs.synapse.org/) and refer to the necessary docs [synapser docs](https://r-docs.synapse.org/articles/synapser.html#connecting-to-synapse) to successfully log in to synapse and start using its various analytical tools.
+
+```{r login_to_synapse, eval=TRUE, echo=TRUE}
+
+## The login credentials have been stored in .synapseConfig file in the home dir. If you dont have this setup, please make the file before trying to login.
+synLogin()
+
+set.seed('99999')  #set seed for reproducibility
+```
+
+## Accessing or downloading data from Synapse
+
+* Look up the SynID of the required file and then use the __synTableQuery__ command to access the required data table.
+
+```{r get_data_from_synapse, echo=TRUE, eval=TRUE}
+
+#### Download the individual data tables:
+# 1. These are large files, so downloads will take a while, please be patient!
+# 2. You will only be able to access the files to which you have been granted access. Please visit the Synapse hackathon page to fulfill the access requirements
+cnf_data_resource <- synTableQuery("SELECT * FROM syn21222341")$asDataFrame() 
+synodos_nf2 <- synTableQuery("SELECT * FROM syn21520573")$asDataFrame()
+synodos_nf1 <- synTableQuery("SELECT * FROM syn21520550")$asDataFrame()
+jhu_biobank <- synTableQuery("SELECT * FROM syn20812185")$asDataFrame()
+nf1_glioma <- synTableQuery("SELECT * FROM syn21521726")$asDataFrame()
+pnf_cell_line <- synTableQuery("SELECT * FROM syn22351884")$asDataFrame()  
+## add darbro synodos NF1 data 
+
+all_rnaseq <- rbind(cnf_data_resource, 
+                    synodos_nf2, 
+                    synodos_nf1, 
+                    jhu_biobank, 
+                    nf1_glioma,
+                    pnf_cell_line)  
+
+```
+
+# Exploring the data files
+
+The accessed file is a dataframe which contains the gene expression data collected from normal and tumor samples of eight different tumor types. The last few columns of the dataframe contain meta-data associated with the samples. 
+
+## Structure of the file
+
+Lets first take a brief look at the contents of the accessed file:
+```{r explore_data, echo=T, eval=TRUE, message=FALSE, warning=FALSE}
+
+# Clean up dataframe
+all_rnaseq$sex[all_rnaseq$sex == "male"] <- "Male"
+all_rnaseq$sex[all_rnaseq$sex == "female"] <- "Female"
+colnames(all_rnaseq)[colnames(all_rnaseq)=="used"] <- "id"
+
+#remove any rows that dont have valid synapse id associated with the data
+all_rnaseq <- all_rnaseq %>% 
+  dplyr::filter(!is.na(id))  
+
+##Inspect the file
+print("Dimensions of the file:")
+dim(all_rnaseq)
+print("Contents of the file:")
+head(all_rnaseq)
+
+```
+
+The following table contains detailed descriptions of the metadata variables included in the data file:
+
+Var | Description
+--- | --- 
+ _id_  |  the synapseIDs of the individual files with raw data
+ _specimenID_  |  individual samples
+ _species_  |  the source of the specimen
+ _age_  |  the age of the patient 
+ _sex_  |  the sex of the patient
+ _tumorType_  |  the the type of tumor, can be one of 7 different diagnoses
+ _isCellLine_  |  indicates whether the origin tissue was a cell line or a patient
+ _studyName_  |  the specific initiative/consortia that the study was a part of
+ _Symbol_  |  the common names of genes 
+ _cellCulture_  |  whether the data was obtained from a cell culture experiment or an _in-vivo_ experiment. Many inherent differences exist between _cell culture_ experiments and _in-vivo_ experiments. These differences may need to be taken into account during analysis and interpretation of the data
+ _totalCounts_  |  the main measure of expression levels of the gene. _(the values documented here are not corrected for batch/study)_ 
+ _zScore_  |  normalized counts (counts for a gene can vary significantly due to technical differences in different studies, so we normalized the counts into a zScore for a comparable measurement between samples for the same gene)
+ 
+
+## Metadata 
+
+The metadata in a healthcare study includes descriptions of the specimens, and the details of the studies they originated from. We can explore the metadata by visualizing various aspects of it to get a sense of the data contained within our dataset and put it in context of the disease and patients.
+
+For example, we can visualize the data distribution according to sex.
+```{r explore_metadata, echo=T, eval=TRUE, results='asis', message=FALSE, warning=FALSE}
+
+
+#Plot Metadata
+ggplot(all_rnaseq %>% 
+         dplyr::select(specimenID,tumorType,sex) %>% 
+         unique(), 
+       aes(x=sex))+
+    geom_bar(aes(x=sex,fill=tumorType),position='dodge')+
+  xlab("Sex") + 
+  ylab("Number of individual samples") +
+  ggtitle('RNA-seq sample distribution')+
+  scale_fill_sage_d() +
+  theme_sage(base_size = 10)
+
+
+#Plot genes with metadata
+analyzeMetdataWithGenes<-function(datafile,prefix, gene_a, ...){
+  #look at some marker genes using normalized zScore
+  ggplot(subset(datafile,Symbol%in%c(gene_a, ...)))+
+    geom_jitter(aes(x=Symbol,
+                    y=zScore,
+                    shape=studyName,
+                    col=tumorType))+
+    ggtitle(paste(prefix,'Selected gene counts', sep = '::'))+
+    scale_color_sage_d() +
+    theme_sage()
+}
+analyzeMetdataWithGenes(all_rnaseq, "NF_hackathon", "NF1", "NF2", "GFAP")
+
+
+```
+
+## Visualizing expression of specific genes in different tumor types
+
+We can further visualize the expression of specific genes in different tumorTypes to investigate the possible contribution of that gene to the progression of various tumorTypes.For example lets plot the expression levels of the genes _GFAP_ _(astrocyte-specific marker gene)_, _NF1_ _(neurofibromin 1 gene)_, _NF2_ _(neurofibromin 2 gene)_ in different tumortypes. Since our datasets contain human data, make sure to include gene names specific to humans.
+
+```{r Gene_exp_lookup, echo=T, eval=TRUE, results='asis', message=FALSE, warning=FALSE}
+
+##barplot
+
+singleGeneBarplot<-function(datafile,gene){
+  ggplot(subset(datafile,Symbol==gene))+
+    geom_bar(aes(x=tumorType,
+                 y=zScore,
+                 fill=studyName),
+             stat='identity',position='dodge')+
+    ggtitle(paste(gene,'Expression'))+
+    ggpubr::rotate_x_text()+
+    scale_fill_sage_d() +
+    theme_sage()+
+    theme(axis.text.x  = element_text(size=10, angle = 90),
+          legend.text = element_text(size=10),
+              legend.position="right")
+}
+
+singleGeneBarplot(all_rnaseq,'GFAP')
+singleGeneBarplot(all_rnaseq,'NF1')
+singleGeneBarplot(all_rnaseq,'NF2')
+
+```
+
+# Data Analysis
+
+## Dimensionality Reduction
+
+To explore the data and find meaningful differences between samples, we first perform some dimensionality reduction using principal component analysis. We can then look at the genes that are top contributors to the first few principal components. 
+
+```{r PCA, echo=T, eval=TRUE, results='hide', message=FALSE, warning=FALSE}
+
+###PCA plots  
+#all_rnaseq$specimenID <- as.factor(all_rnaseq$specimenID)
+
+doPcaPlots<-function(datafile, env){
+  #create matrix
+  combined.mat=reshape2::acast(datafile,Symbol~specimenID,value.var="zScore", fun.aggregate = mean)
+  
+  #then remove missing
+  missing=which(apply(combined.mat,1,function(x) any(is.na(x))))
+  combined.mat=combined.mat[-missing,]
+  
+  ###PCA 
+  library(ggfortify)
+  env$tab <- autoplot(prcomp(t(combined.mat))) 
+
+  ###Look at genes contributing to PCs
+  loads=prcomp(combined.mat)$x
+  
+  genes1=rownames(combined.mat)[rev(order(loads[,1]))[1:25]]
+  #now take those loadings from pc1
+  env$tab1 <- ggplot(subset(datafile,Symbol%in%genes1[1:5]))+
+                    geom_jitter(aes(x=Symbol,
+                                    y=zScore,
+                                    col=tumorType,
+                                    shape=studyName), 
+                                width =0.1, size=2, height = 0.1)+
+                    ggtitle('Selected gene counts from PC1')+
+    scale_color_sage_d() +
+    theme_sage()+
+    theme(axis.text.x  = element_text(size=10, angle = 45),
+          legend.text = element_text(size=10),
+              legend.position="right")
+
+  genes2=rownames(combined.mat)[rev(order(loads[,2]))[1:25]]
+  #now take those loadings from pc2
+  env$tab2 <- ggplot(subset(datafile,Symbol%in%genes2[1:5]))+
+              geom_jitter(aes(x=Symbol,
+                              y=zScore,
+                              col=tumorType,
+                              shape=studyName), 
+                          width =0.1, size=2, height = 0.1)+
+              ggtitle('Selected gene counts from PC2')+
+    scale_color_sage_d() +
+    theme_sage()+
+    theme(axis.text.x  = element_text(size=10, angle = 45),
+          legend.text = element_text(size=10),
+              legend.position="right")
+}
+
+myEnv <- new.env()
+doPcaPlots(all_rnaseq, myEnv)
+myEnv$tab
+myEnv$tab1
+myEnv$tab2
+
+
+```
+
+
+
+Here we notice that the dataset seems to have two distinct clusters. 
+
+## Differences in gene expression between conditions
+
+One of the fundamental questions of interest is whether expression of a gene of interest is different in various conditions. For example, is the expression of our favorite genes different in males vs females. To answer this question we can compare the *normalized* expression levels of our genes of interest between males and females and visualize the fold change in expression between the sexes in the following boxplot. Please note that for comparision of gene expression, we generally use normalized log counts instead of raw counts.
+
+```{r DEG_analysis, echo=T, eval=TRUE, results='hide', message=FALSE, warning=FALSE}
+
+#take log of counts
+with.log=all_rnaseq%>%mutate(logCounts=log10(totalCounts+0.0001))
+  
+##now take mean across sex,tumor type and gene
+diffexdata <- with.log%>%
+  group_by(tumorType,Symbol,sex)%>%
+  mutate(mcounts=mean(logCounts))%>%
+  dplyr::select(tumorType,sex,Symbol,mcounts)%>%
+  unique()%>%spread(sex,mcounts)%>%
+  mutate(MaleVsFemale=Male-Female)
+
+##Plot fold change
+diffExBoxplot<-function(diff_file,gene){
+  ggplot(diff_file)+
+    geom_boxplot(aes(x=tumorType,
+                     y=MaleVsFemale),
+                 outlier.color=NA)+
+    ylim(c(-1,1))+
+    ggpubr::rotate_x_text()+
+    geom_point(data=subset(diff_file,
+                           Symbol==gene),mapping=aes(x=tumorType,
+                                                               y=MaleVsFemale),color='red')+
+    ggtitle(paste('Log10 fold change of',gene,'in male vs. female'))+
+    scale_color_sage_d() +
+    theme_sage()+
+    theme(axis.text.x  = element_text(size=10, angle = 45),
+          legend.text = element_text(size=10),
+              legend.position="right")
+}
+
+diffExBoxplot(diffexdata,'GFAP')
+diffExBoxplot(diffexdata,'NF1')
+diffExBoxplot(diffexdata,'NF2')
+
+
+```
+
+## Gene Ontology Analysis
+
+While thousands of genes can change expression levels, the biological relevance of such changes are estimated by investigating the changes in biological processes in which the genes are involved. To get a sense of which biological processes may be linked to our list of upregulated or downregulated genes, we may perform a _Gene Ontology (GO) Enrichment Analysis_ and visualize the most common processes relevant to our analysis. In the following plot, the biological processes enriched in our list of upregulated genes (left, G1) and downregulated genes (right, G2) for Low Grade Glioma is visualized in the form of a word cloud. The most significantly enriched term is on the top. These terms can give us subtle indications as to which cellular signaling pathways or gene regulatory networks may be most interesting in our follow-up analyses.
+
+```{r GOsummaries, echo=T, eval=TRUE, message=FALSE, warning=FALSE, fig.height=10, fig.width=10}
+
+#Make gene lists
+DEG_genelist <- diffexdata[order(-diffexdata$MaleVsFemale),]
+#sorted upregulated gene
+gene_list_up <- subset(DEG_genelist, MaleVsFemale > 0 & tumorType == "Low Grade Glioma")
+#sorted downregulated genes
+gene_list_down <- subset(DEG_genelist, MaleVsFemale < 0 & tumorType == "Low Grade Glioma")
+gene_list_down <- gene_list_down[order(gene_list_down$MaleVsFemale),]
+
+#Make list of gene_lists (upreg genes and downreg genes)
+gene_list = list(List = list(gene_list_up$Symbol, gene_list_down$Symbol))
+
+#Make Wordcloud
+gosummaries_object <- gosummaries(x = gene_list,
+                                  organism = "hsapiens",
+                                  go_branches = c("BP","keg", "rea"),
+                                  min_set_size = 50,
+                                  max_set_size = 1000,
+                                  max_signif = 40,
+                                  ordered_query = TRUE,
+                                  hier_filtering = "moderate",
+                                  wc_algorithm = "top",
+                                  wordcloud_legend_title = NULL,
+                                  correction_method = "fdr",
+                                  domain_size = "annotated")
+
+#Plot wordcloud
+plot(gosummaries_object,
+     components = 1:min(10, length(gosummaries_object)),
+     panel_height = 0,
+     panel_width = 30,
+     fontsize = 9,
+     term_length = 100,
+     wordcloud_colors = c("grey90", "grey50", "black"),
+     wordcloud_legend_title = "Enrichment P-Value")
+
+```
+
+
+## Pathway Analysis
+
+Generally disease conditions can change a _group of genes_ ( _gene-sets_ ) simultaneously, thus affecting one or more cellular signaling pathways and gene regulatory networks. Changes in _gene-sets_ can be visualized to get an idea about how cellular signaling pathways may be affected by the disease condition.
+
+```{r PathwayAnalysis, echo=T, eval=TRUE, results='hide', message=FALSE, warning=FALSE, fig.height=10, fig.width=10}
+
+mat<-reshape2::acast(all_rnaseq,Symbol~specimenID,value.var='zScore',fun.aggregate = mean)
+#missing<-which(apply(mat,1,function(x) any(is.na(x))))
+#mat<-mat[-missing,]
+data("c2BroadSets")
+  
+#get mapping from enst to hgnc
+mart = biomaRt::useMart("ensembl", dataset="hsapiens_gene_ensembl")
+my_chr <- c(1:22,'X','Y')
+map <- getBM(attributes=c("entrezgene_id","hgnc_symbol"),mart=mart,filters='chromosome_name',values=my_chr)
+  
+entrez<-map[match(rownames(mat),map[,2]),1]
+mat<-mat[which(!is.na(entrez)),]
+rownames(mat)<-entrez[!is.na(entrez)]
+
+# override parallel::detectCores in case it fails to prevent gsva from failing
+requireNamespace('parallel')
+if (is.na(parallel::detectCores())) {
+  my.detectCores = function() {
+    return(1)
+  }
+  assignInNamespace("detectCores", my.detectCores, ns="parallel", envir=as.environment("package:parallel"))
+}
+
+res=gsva(mat,method='ssgsea',gset.idx.list=c2BroadSets)
+
+vars<-apply(res,1,var)
+annotes=all_rnaseq%>%dplyr::select(specimenID,age,sex,tumorType,isCellLine,studyName)%>%unique
+rownames(annotes)<-annotes$specimenID
+  
+pheatmap(res[names(sort(vars)[1:50]),],
+                       labels_col=rep("",ncol(res)),
+                       fontsize_row = 4,
+                       clustering_method = 'ward.D2',
+                       annotation_col = dplyr::select(annotes,-specimenID), 
+                       width = 16, 
+                       height = 8)
+
+print(" First look at the GSVA results : ")  
+res[1:5,1:5]
+
+```
+

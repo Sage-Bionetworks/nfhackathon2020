@@ -1,0 +1,53 @@
+---
+title: "0. Synapse Client Configuration"
+author: Robert Allaway
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    df_print: paged
+    code_folding: show
+---
+
+## Introduction
+
+This module will teach you how to make a synapse configuration file so that you do not have to enter your credentials every time you want to download data from Synapse when using `synapser`. If you are simply browsing the HTML versions of these demos and not running the markdown files interactively in the hackathon Docker container, you can probably skip this module. Otherwise, please read on. 
+
+## Making a Synapse Config file
+
+This file lives in your home directory, and will provide your credentials to your Synapse R, Python and command-line clients. If you are creating this in the hackathon docker container, please remember that files created in the running containers are transient - if you stop the container, you'll have to recreate this configuration file. 
+
+Also, after editing the following snippet, do not save the file and push to Github! If you accidentally push your synapse credentials to github, you'll need to run a tool like BFG Repo Cleaner to scrub them from your repository.
+
+All this being said, to create a synapseConfig file, you can simply edit "username" to your Synapse username and "password" in the following snippet, uncomment the final line (`writeLines`) and then run it to create a .synapseConfig file in your home directory.
+
+```{r}
+username <- "username"
+password <- "password"
+
+creds <- paste0("[authentication]\n",
+                "username = ", username, "\n",
+                "password = ", password)
+
+#uncomment this line
+#writeLines(creds, "~/.synapseConfig")
+```
+
+## Testing your configuration file
+
+Let's check that this worked by loading the `synapser` client and logging in. Uncomment 
+After running `synLogin()`, you should see a message like `Welcome, FirstName LastName!``
+
+```{r}
+library(synapser)
+synLogin()
+```
+
+
+## Proceed to the next module. 
+
+Return to the Files pane in the lower right and open the next module: `1-rnaseq-data-introduction.rmd`.

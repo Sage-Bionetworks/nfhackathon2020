@@ -1,0 +1,335 @@
+---
+title: "Genomic Variants: Introduction to whole genome sequence data"
+author: Jineta Banerjee
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    number_sections: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    fig_width: 7
+    fig_height: 6
+    fig_caption: true
+    df_print: paged 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Getting Started
+
+This document aims to guide the hackathon participants, who have limited exposure to Synapse as a platform and clinical/biological data, through exploration and analysis of the available [whole genome sequence](https://ghr.nlm.nih.gov/primer/testing/sequencing) dataset. The available dataset is a harmonized dataset including genomic variant (WGS) data from normal and two different tumor types from two different study initiatives. 
+
+The scope of this document is to inform participants:
+
+* how to navigate the Synapse environment to access and work with the data files stored in Synapse
+* display the key features of the genomic variant (WGS) dataset 
+* introduce few general analysis steps of the data and their interpretation
+
+At the end of this document, the participants will be able to download the data and understand various intricacies that exist in this given dataset. We encourage participants to visualize the dataset by faceting on different variables to get an accurate understanding of the dataset. 
+
+```{r lib_synapser, eval=TRUE, results='hide', message=FALSE, warning=FALSE, include=TRUE}
+
+library(synapser)
+library(synapserutils)
+library(BiocManager)
+library(gProfileR)
+library(tidyverse)
+library(DT)
+library(maftools)
+library(here)
+library(ggfortify)
+library(stringr)
+library(reshape2)
+library(RColorBrewer)
+library(sagethemes)
+
+## The login credentials have been stored in .synapseConfig file in the home dir. If you dont have this setup, please make the file before trying to login.
+synLogin()
+
+```
+&nbsp;
+
+## Accessing or downloading data from Synapse
+
+Please look up the SynID of the relevant data table and access it using the __synTableQuery__ command of *synapser*. 
+
+```{r load data, eval=TRUE, results='hide', message=FALSE, warning=FALSE}
+
+entity <- synGet("syn20551862")  # access file entity 
+wgs_data <- synTableQuery("SELECT * FROM syn20551862")$asDataFrame()
+
+```
+&nbsp;
+
+# Exploring the data files
+
+The accessed file is a dataframe which contains the genomic variant data collected from normal and tumor samples under the cNF study initiative. The last few columns of the dataframe contain meta-data associated with the samples. All silent mutations (mutations that do not affect the sequence of amino acids in the protein product of the gene) have been removed to facilitate analysis of mutations that may affect protein sequences.
+
+## Structure of the file
+
+Lets first take a brief look at the contents of the accessed file:
+```{r explore data, eval=TRUE, results='show', message=FALSE, warning=FALSE, include=TRUE}
+
+# Clean up dataframe
+wgs_data$sex[wgs_data$sex == "male"] <- "Male"
+wgs_data$sex[wgs_data$sex == "female"] <- "Female"
+wgs_data <- wgs_data[,-c(1:2)]
+
+print("Contents of the file:")
+head(wgs_data)
+
+```
+
+The following table contains descriptions of some of the metadata variables included in the data file:
+
+Var | Description
+--- | --- 
+ _Hugo_Symbol_  |  names of genes according to HUGO database
+ _Entrez_gene_Id_  |  Gene ID according to Entrez Database
+ _NCBI_Build_ | Reference genome that was used to align the exomeSeq data
+ _Chromosome_ | Chromosome number (range 1-22 and X,Y),  Chr M == mitochondrial genome (absent in exomes with NCBI Build == hg19)
+ _species_  |  the source of the specimen
+ _age_  |  the age of the patient 
+ _sex_  |  the sex of the patient
+ _tumorType_  |  the the type of tumor, can be one of 7 different diagnoses
+ _isCellLine_  |  indicates whether the origin tissue was a cell line or a patient
+ _study_  |  the specific initiative/consortia that the study was a part of
+ _id_ | Synapse ID of the sample (unique for each sample)
+
+For more information regarding various columns in the dataset please visit here: https://docs.gdc.cancer.gov/Data/File_Formats/MAF_Format/#vep
+
+&nbsp;
+
+## Metadata 
+
+The metadata in a healthcare study includes descriptions of the specimens, and the details of the studies they originated from. We can explore the metadata by visualizing various aspects of it to get a sense of the data contained within our dataset and put it in context of the disease and patients.
+
+For example, we can visualize the data distribution according to sex.
+
+```{r explore Metadata1, eval=TRUE, results='show', message=FALSE, warning=FALSE, include=TRUE}
+
+#Plot Metadata
+wgs_data %>% group_by(Tumor_Sample_Barcode) %>%
+ggplot(aes(x=sex))+
+    geom_bar(aes(x=sex,
+                 fill=as.factor(tumorType)),
+             position='dodge')+
+    ggtitle('Whole Genome Seq sample distribution')+
+  scale_fill_sage_d() +
+  theme_sage()
+```
+    
+We can also look at the different types of mutations observed for various genes in our dataset according to the tumor type. The different types of variants recognized in our dataset include:
+
+Variant_classification | Description
+--- | ---
+_Nonsense_Mutation_ | Mutation leading to change of a coding codon to stop codon
+_Splice_Site_ | Mutation leading to change in splice site
+_Missense_Mutation_ | Mutation resulting in change in amino acid
+_In_Frame_Del_ | Deletion of nucleotides divisible by three leading to deletions of amino acids
+_In_Frame_Ins_ | Insertion of nucleotides divisible by three leading to insertion of amino acids
+_Frame_Shift_Ins_ | Insertions of nucleotides (not divisible by three) such that codons downstream of the insertion are shifted resulting in a malformed protein or nonsense-mediated decay
+_Frame_Shift_Del_ | Deletions of nucleotides (not divisible by three) such that codons downstream of the deletion are shifted resulting in a malformed protein or nonsense-mediated decay
+_Translation_Start_Site_ | Mutation causing changes in translation start site
+_Nonstop_Mutation_ | SNP in stop codon that disrupts the stop codon causing continued translation
+_IGR_ | Mutations in intergenic regions
+
+More information regarding variants can be found [here](https://uswest.ensembl.org/info/genome/variation/prediction/classification.html#classes)
+
+```{r waterfallplot, eval=TRUE, results='show', message=FALSE, warning=FALSE, include=TRUE}
+
+#Parse out anno and data from csv
+anno <- wgs_data[, c("Tumor_Sample_Barcode", "id", "age", "assay", "diagnosis", 
+                     "individualID", "nf1Genotype","nf2Genotype","organ","isCellLine", "sex", 
+                     "species", "specimenID", "study", "studyId", "disease","tumorType")]
+anno <- unique(anno)
+
+drop_cols <- c("id", "age", "assay", "diagnosis", 
+                     "individualID", "nf1Genotype","nf2Genotype","organ","isCellLine", "sex", 
+                     "species", "specimenID", "study", "studyId", "disease","tumorType")
+maf <- wgs_data[, !(names(wgs_data) %in% drop_cols)]
+
+mut_vec <- c(
+  "Nonsense_Mutation",
+  "Splice_Site",
+  "Missense_Mutation",
+  "In_Frame_Del",
+  "In_Frame_Ins",
+  "Frame_Shift_Ins",
+  "Frame_Shift_Del",
+  "Translation_Start_Site",
+  "Nonstop_Mutation",
+  "IGR" 
+)
+# Use read.maf to make maf object
+maf_wgs <- read.maf(maf = maf, clinicalData = anno, vc_nonSyn = mut_vec, verbose = FALSE) #use maftools to generate visualizations
+
+#Make a diverse color spectrum
+vc_cols = sage_colors %>% 
+  unlist()
+vc_cols = vc_cols[seq(2, length(vc_cols), 5)]
+names(vc_cols) = mut_vec
+
+
+#Oncoplot / Waterfall plot
+oncoplot(maf = maf_wgs, top = 50,  colors = vc_cols, fontSize = 0.3, fill = FALSE,
+         logColBar = TRUE, clinicalFeatures = "tumorType", sortByAnnotation = TRUE, 
+         removeNonMutated = FALSE, bgCol = "#CCCCCC") 
+
+```
+
+We can zoom in on a few of our favorite genes to explore the different kind of mutations found in them.
+```{r explore Metadata2, eval=TRUE, results='show', message=FALSE, warning=FALSE, include=TRUE}
+#Plot genes with metadata
+analyzeMetdataWithGenes<-function(datafile,prefix, gene_a, ...){
+  #look at some marker genes using normalized zScore
+  ggplot(subset(datafile,Hugo_Symbol%in%c(gene_a, ...)))+
+    geom_jitter(aes(x=Hugo_Symbol, 
+                    y=Variant_Classification, 
+                    shape=study,col=tumorType), 
+                width =0.1, size=2, height = 0.1)+
+    ggtitle(paste(prefix,'Variant types in selected genes', sep = '::'))+
+    scale_color_sage_d() +
+    theme_sage()
+}
+analyzeMetdataWithGenes(wgs_data, "WGS", "NF1", "GFAP")
+
+```
+
+Here we picked two genes, _nf1_ and _gfap_, to explore the different flavors of mutations that genes may carry. Mutations in _nf1_ gene have been strongly correlated with the diagnosis and prognosis of Neurofibromatosis 1. The plot above confirms the presence of various types of mutations in the _nf1_ gene in all of our patient samples. The _gfap_ gene is primarily expressed in astrocytes in the central nervous system (cells that show uncontrolled growth in glioma) as well as in Schwann cells in the peripheral nervous system (cells involved in cutaneous NF). Unlike the various different kinds of mutations noted in _nf1_, we observe the presence of only missense mutations in _gfap_ in a few of our patient samples.
+
+&nbsp;
+
+# Data Analysis
+
+## Dimensionality Reduction
+
+To explore the data and find meaningful differences between samples, we first perform a simplistic principal component analysis, and explore the genes that are top contributors to the first few principal components. 
+
+We tested the hypothesis whether the number of mutations in a set of genes can be used for segmenting the data/samples into meaningful groups. For this, we first created a scoring matrix by converting variant data into numerical variables for PCA. 
+
+```{r r making a scoring matrix, eval=TRUE, results='hide', message=FALSE, warning=FALSE}
+
+# Filter select columns for analysis
+select_df <- wgs_data[, c("Hugo_Symbol", "Entrez_Gene_Id", "Chromosome", "Start_Position", "Variant_Type", 
+                            "Transcript_ID", "HGVSp_Short", "BIOTYPE", "SWISSPROT", "RefSeq", "PolyPhen", 
+                            "IMPACT", "FILTER", "id", "assay", "diagnosis", "individualID", "isCellLine", 
+                            "organ", "sex", "species", "study", "tumorType", "gnomAD_AF", "gnomAD_AFR_AF",
+                            "gnomAD_AMR_AF", "gnomAD_ASJ_AF", "gnomAD_EAS_AF", "gnomAD_FIN_AF", "gnomAD_NFE_AF",
+                            "gnomAD_OTH_AF", "gnomAD_SAS_AF")]
+
+# Make dummy variables for PCA
+select_df <- select_df %>% mutate(isSNP = as.numeric(select_df$Variant_Type == "SNP")) 
+select_df <- select_df %>% mutate(isDEL = as.numeric(select_df$Variant_Type == "DEL")) 
+select_df <- select_df %>% mutate(isDNP = as.numeric(select_df$Variant_Type == "DNP"))  
+select_df <- select_df %>% mutate(isINS = as.numeric(select_df$Variant_Type == "INS")) 
+select_df <- select_df %>% mutate(isONP = as.numeric(select_df$Variant_Type == "ONP"))  
+select_df <- select_df %>% mutate(isTNP = as.numeric(select_df$Variant_Type == "TNP")) 
+select_df <- select_df %>% mutate(totHits = rowSums(select_df[,c(33:38)]))
+
+# Filter out well known common variants to look for rare mutations, and select mutations with annotated "HIGH" impact on proteins
+impact_df <- select_df[(select_df$IMPACT == "HIGH" & select_df$FILTER != "common_variant"),]
+```
+
+We used the number of mutational events (_hits_) in each gene as a scoring metric for the gene to do our principal component analysis. Since some genomic variants can be quite common and many of them are well tolerated, we filtered out all known common_variants in the genes and selected for the ones with high impact on proteins to strengthen the signal for PCA. 
+
+```{r PCA_1, eval=TRUE, results='show', message=FALSE, warning=FALSE}
+
+## Function for PCA plot
+doPcaPlots<-function(datafile, var, env){
+  ###create matrix
+  combined.mat=reshape2::acast(datafile,Hugo_Symbol~id,value.var=var, fun.aggregate = sum)
+  
+  ###PCA 
+  env$tab <- autoplot(prcomp(t(combined.mat))) 
+
+  ###Look at genes contributing to PCs
+  loads=prcomp(combined.mat)$x
+  
+  genes1=rownames(combined.mat)[rev(order(loads[,1]))[1:25]]
+  ###now take those loadings from pc1
+  env$tab1 <- ggplot(subset(datafile,Hugo_Symbol %in% genes1[1:5]))+
+                    geom_jitter(aes(x=Hugo_Symbol,
+                                    y=Variant_Type,
+                                    col=tumorType,
+                                    shape=study), 
+                                width = 0.1, size = 1)+
+                    ggtitle('Selected genes from PC1')+
+    scale_color_sage_d() +
+    theme_sage()
+
+  genes2=rownames(combined.mat)[rev(order(loads[,2]))[1:25]]
+  ###now take those loadings from pc2
+  env$tab2 <- ggplot(subset(datafile,Hugo_Symbol %in% genes2[1:5]))+
+              geom_jitter(aes(x=Hugo_Symbol,
+                              y=Variant_Type,
+                              col=tumorType,shape=study), 
+                          width = 0.1, size = 1)+
+              ggtitle('Selected genes from PC2')+
+    scale_color_sage_d() +
+    theme_sage()
+}
+
+
+myEnv <- new.env()
+doPcaPlots(impact_df, "totHits", myEnv)
+print("PCA: excluding common variants (scoring metric : no. of hits)")
+myEnv$tab
+```
+
+We note that the PCA seems to identify a few samples as outliers. However, even with our efforts to select relevant mutations, the first two principal components are limited in identifying major sources of variation in the data. 
+
+```{r PCA_2, eval=TRUE, results='show', message=FALSE, warning=FALSE}
+
+myEnv$tab1
+myEnv$tab2
+
+```
+&nbsp;
+
+Since our PCA seems to capture only ~40% of the variance in the data, lets try a different scoring metric to see if we can identify other sources of variation that may exist in the data. We tried to calculate a score (_mutScore_) for each mutation, derived from the strength of mutations as predicted by [Polyphen](http://genetics.bwh.harvard.edu/pph2/) or [SIFT](https://sift.bii.a-star.edu.sg/) to evaluate and add weights to the impact of the mutation on the gene.
+
+```{r PCA_3, eval=T, results='show', message=FALSE, warning=FALSE}
+
+###PCA plots  
+
+# Make a hypothetical scoring matrix
+select_df <- select_df %>% mutate(impactScore = ifelse(select_df$IMPACT == "HIGH", 1,
+                                                       ifelse(select_df$IMPACT == "MODERATE", 1, 0))) # add dummy numerics for categorical variables
+select_df <- select_df %>% 
+  mutate(isBenign = ifelse(str_detect(select_df$PolyPhen, "benign"), (extract_numeric(select_df$PolyPhen)), 0.000001))  # add negative weights to benign mutations
+select_df <- select_df %>% 
+  mutate(isDamaging = ifelse(str_detect(select_df$PolyPhen, "benign"), 0.000001, extract_numeric(select_df$PolyPhen))) # add positive weights to damaging mutations
+select_df <- select_df %>% 
+  mutate(totHits = rowSums(select_df[,c(33:38)])) # count number of mutational hits
+select_df$isDamaging[(is.na(select_df$isDamaging) == TRUE)] <- 0
+select_df$isBenign[(is.na(select_df$isBenign) == TRUE)] <- 0
+select_df <- select_df %>% 
+  mutate(mutScore = (select_df$totHits * select_df$impactScore * (select_df$isBenign + select_df$isDamaging))) # calculate mutation score
+
+# Do PCA
+print("PCA: all variants (scoring metric: weighted mutation score)")
+myEnv <- new.env()
+doPcaPlots(select_df, "mutScore", myEnv)
+myEnv$tab
+```
+
+We note that now the principal components capture a bit more of the variance in the data and segments the samples into two or possibly three separate clusters. The contributors to the first two components are plotted below.
+
+```{r PCA_4, eval=T, results='show', message=FALSE, warning=FALSE}
+
+myEnv$tab1
+myEnv$tab2
+```
+
+We encourage the participants to explore other variables present in the dataset and combinations thereof to find more significant sources of variance within the data. 
+```{r}
+
+sessionInfo()
+
+```
