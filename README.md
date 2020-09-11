@@ -8,13 +8,13 @@
 
 ## About the event
 
-The Children’s Tumor Foundation (CTF), the Neurofibromatosis Therapeutic Acceleration Program (NTAP), and Sage Bionetworks are excited to announce the third Neurofibromatosis (NF) hackathon and the first virtual NF hackathon with global reach.  The 2020 Hackathon will focus on analyzing diverse datasets including genomic, drug screening, drug-target association, imaging, and other data for all the three conditions of NF (NF1, NF2, Schwannomatosis).
+Welcome to the 2020 Hack for NF, a virtual Hackathon focused on building high-tech solutions to improve research, clinical innovation, and quality of life for patients living with neurofibromatosis (NF). NF is a rare disease that causes tumors to grow on nerves throughout the body. This genetic disorder shares a lot of molecular pathways with cancer, but its features are more unique and complex. More than 2.5 million people worldwide are affected and there is still no cure. CTF’s mission is to drive research, expand knowledge and advance care for the NF community. By taking part in the Hack for NF, you are playing a critical role in helping the community come closer to their vision to End NF. 
  
-The goals of the NF Hackathon are: 1) to re-use the data that our researchers and scientists have already generated in innovative ways to answer interesting challenge questions, 2) to incentivize data sharing as a powerful practice that will allow researchers to move at a faster pace and create new insights, and 3) to create innovative collaborations between diverse disciplines.
+We are offering three challenge tracks focused on NF Data, Mobile Device Engagement, and a Wildcard option, the Hack for NF provides opportunities for a wide range of experts from different fields to bring their expertise to the table. The goals of the NF Data track are: 1) to re-use the data that our researchers and scientists have already generated in innovative ways to answer interesting challenge questions, 2) to incentivize data sharing as a powerful practice that will allow researchers to move at a faster pace and create new insights, and 3) to create innovative collaborations between diverse disciplines.
 
 ## How to use this repository
 
-We've prepared Docker containers that contain all of the necessary dependencies to retrieve data from Synapse and perform some basic analyses of these data. The goal of this is to help you orient yourself to the data prior to the event in September.
+We've prepared Docker containers that contain all of the necessary dependencies to retrieve available NF data from Synapse and perform some basic analyses of these data. The goal of this is to help you orient yourself to the data prior to the event in September.
 We've created containers for both R and Python users. You can find instructions on running these containers and following the data demos below. 
 If you like, you can also use these containers as a basis for creating your own Docker containers during the hackathon so that others can reproduce your analyses.
 
