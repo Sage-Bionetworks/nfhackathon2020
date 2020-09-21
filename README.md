@@ -24,7 +24,7 @@ These instructions assume that you:
 * have registered for a [Synapse account](https://www.synapse.org/#!RegisterAccount:0) 
 * have followed the [How to Participate and Getting the Data!](https://www.synapse.org/#!Synapse:syn22336443/wiki/605183) instructions on Synapse. 
 * have [installed Docker Community Edition](https://docs.docker.com/v17.12/install/) and that the docker service is running on your machine
-* are running a Unix-based OS, such as Ubuntu or Mac. These instructions have not been tested on Windows-based platforms. If you are using Google Cloud Platform, please see the [Google Cloud Docker instructions](#google-cloud).
+* are running a Unix-based OS, such as Ubuntu or Mac. These instructions have not been tested on Windows-based platforms. 
 
 ### RStudio Docker Image (Local)
 
@@ -47,19 +47,6 @@ These instructions assume that you:
 *IMPORTANT NOTE* To save any results created during your Docker session, you'll need to mount a local directory to the Docker container when you run it. This will copy anything saved to the working directory to your local machine. Before step 4, do `mkdir output` to create an output directory locally. Then run the command in step 4 with a `-v` flag e.g. `docker run -p 8888:8888 -v $PWD/output:/home/jovyan/work/output nfosi/nf-hackathon-2020-py
 ` Alternatively, or in addition, you can save all of your results to Synapse using `synapseclient`.
 
-### Google Cloud 
-
-Please note, it's not necessary to run any of the docker containers we provide on the cloud, but we've provided instructions for doing this on Google Cloud if you prefer. This information will also be helpful if you want to use any other Rstudio or jupyter notebook-based Docker containers to conduct your analysis during the hackathon. 
-
-1. Log into Google Cloud Platform and click on Compute Engine, followed by VM Instances. Click "Create". 
-2. Name your instance, select a zone, and under "boot disk" click "change". 
-3. Select a container optimized image: "Container-Optimized OS 73-xxxxx.xxx.x stable" 
-4. Click "Allow HTTP Traffic", and then "Create"
-5. After the instance has started, click on the instance's name in the VM Instances table, click Edit, and then add "docker-server" as a network tag. 
-6. Navigate back to the VM Instances Table and click on the 3-dot menu after your instance, then click on "View Network Details". 
-7. Click on Firewall Rules -> Create Rule. Type in a name (e.g. allow-tcp), add "docker-server" to the "Target Tags box, add 0.0.0.0/0 to the source IP range (or, if you know what IPs you'll be accessing the RStudio Server/jupyter sessions from, you can specify those IPs). Then, under Protocols and Ports, click Specified protocols and ports, check the "tcp:" box, and add 8787,8888 to the box. Click "Create" to make the rule. 
-8. Return to the VM Instances Table and click "SSH" to open a new SSH window. Also, note the "External IP" for your instance, you'll need this later. 
-9. Move to step 2 of the [GCP RStudio instructions](#rstudio-docker-image-gcp) or [GCP jupyter instructions](#jupyter-docker-image-gcp).
 
 ### RStudio Docker Image (GCP)
 
