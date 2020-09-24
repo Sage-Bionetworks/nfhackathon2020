@@ -71,4 +71,4 @@ I haven't tried to dual-boot my Windows Home Edition PC to Linux.  I can still r
 
 ### Documenting your Projects
 
-We've provided a template in a submodule of this repository. You can fork this submodule to start your own project to record your hackathon work! [Check it out here](https://github.com/Sage-Bionetworks/GoodDocData/blob/master).
+We've provided a template in a submodule of this repository. You can fork this submodule to start your own project to record your hackathon work! [Check it out here](https://github.com/Sage-Bionetworks/GoodDocData/blob/master/).
